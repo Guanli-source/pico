@@ -65,7 +65,7 @@ PROVIDER_CHOICES = ("ollama", "openai", "anthropic", "deepseek")
 SECRET_ENV_NAMES_VAR = "PICO_SECRET_ENV_NAMES"
 
 
-def _effective_provider(args):
+def _effective_provider(args) -> str:
     # Provider 选择优先级：
     # 1. 用户显式传入 --provider
     # 2. 项目 .env / shell 里的 PICO_PROVIDER
@@ -106,9 +106,9 @@ def _effective_model(args, provider):
 
 
 def _configured_secret_names(args):
-    configured_secret_names: set[str] = set(DEFAULT_SECRET_ENV_NAMES)
-    configured_secret_names.update(str(name).upper() for name in args.secret_env_names)
-    extra_names = os.environ.get(SECRET_ENV_NAMES_VAR, "")
+    configured_secret_names: set[str] = set(DEFAULT_SECRET_ENV_NAMES) # 默认需要隐藏的字段，就是各个大模型的 apikey
+    configured_secret_names.update(str(name).upper() for name in args.secret_env_names) # 用户可以通过 --secret-env-name，传入他想隐藏的字段
+    extra_names = os.environ.get(SECRET_ENV_NAMES_VAR, "") # 用户还可以在 .env 中设置额外的需要的隐藏字段
     if extra_names.strip():
         configured_secret_names.update(
             item.strip().upper()
@@ -119,9 +119,10 @@ def _configured_secret_names(args):
 
 
 def _build_model_client(args):
+    # 获取大模型的供应商
+    # 支持的有："ollama", "openai", "anthropic", "deepseek"
     provider = _effective_provider(args)
-    # CLI 只负责把 provider 选择翻译成具体 client。
-    # 真正的提示词格式、缓存支持、HTTP 协议差异，都封装在 models.py 里。
+
     if provider == "openai":
         model = _effective_model(args, provider)
         base_url = getattr(args, "base_url", None) or provider_env("PICO_OPENAI_API_BASE", ("OPENAI_API_BASE",), DEFAULT_OPENAI_BASE_URL)
@@ -210,8 +211,10 @@ def build_welcome(agent, model, host):
             divider("-"),
             row(""),
             row("WORKSPACE  " + middle(agent.workspace.cwd, inner - 11)),
+            row("host " + host),
             pair("MODEL", model, "BRANCH", agent.workspace.branch),
             pair("APPROVAL", agent.approval_policy, "SESSION", agent.session["id"]),
+            
             row(""),
         ]
     )
@@ -234,13 +237,29 @@ def build_agent(args):
     它是整个程序启动链路里最靠近 runtime 的装配点。`main()` 先调它，
     得到 agent 后，后面无论是 one-shot 还是 REPL 模式，都会落到 `ask()`。
     """
-    # 这里是 CLI 到 runtime 的装配点：
-    # 先采集工作区快照和加载项目级环境，再整理 secret 名单、模型后端和 session。
+    # 获取当前git仓库的根目录（没用git的话，repo_root就是cwd），
+    # 并看有哪些重要的文件可以先看一下，具体指：
+    # AGENTS.md 通常会规定工作方式、测试方式、提交约束​
+    # README.md 经常会交代项目结构、启动命令和目录入口​
+    # pyproject.toml 很容易暴露 Python 项目结构和工具链​
+    # package.json 能快速说明这是不是 Node 项目、脚本入口在哪
+    # 这些重要的文件存在 workspace的 project_docs 中
     workspace = WorkspaceContext.build(args.cwd)
-    load_project_env(workspace.repo_root) # 加载.env，会从当前目录即该目录的父目录下查找 .env
-    configured_secret_names = _configured_secret_names(args)
+    
+    # 加载.env，会从当前目录及该目录的父目录下查找 .env 文件并加载到 os.environ
+    load_project_env(workspace.repo_root) 
+    
+    # 需要隐藏的字段，比如 apikey，
+    # 这些变量名的值在 trace/report 输出时会被替换成 [REDACTED]，防止 API key、token 之类的泄露到日志里。
+    configured_secret_names = _configured_secret_names(args) 
+     
+    # 如果是第一次启动，就会在根目录下创建一个 /.pico/sessions 文件夹
+    # 如果创建过了，就不用二次创建
     store = SessionStore(workspace.repo_root + "/.pico/sessions")
+    
+    # 根据参数创建对应的 model_client 
     model = _build_model_client(args)
+    
     session_id = args.resume
     if session_id == "latest":
         session_id = store.latest()
@@ -250,7 +269,7 @@ def build_agent(args):
             workspace=workspace,
             session_store=store,
             session_id=session_id,
-            approval_policy=args.approval,
+            approval_policy=args.approval, # 默认为 ask，选择有："ask", "auto", "never"
             max_steps=args.max_steps,
             max_new_tokens=args.max_new_tokens,
             secret_env_names=configured_secret_names,
@@ -305,7 +324,7 @@ def build_arg_parser():
 
 
 def main(argv=None):
-    args = build_arg_parser().parse_args(argv)
+    args = build_arg_parser().parse_args(argv) # args的数据类型是一个对象，不是一个dict
     agent = build_agent(args)
 
     model = getattr(agent.model_client, "model", getattr(args, "model", DEFAULT_OLLAMA_MODEL))
@@ -313,7 +332,7 @@ def main(argv=None):
     print(build_welcome(agent, model=model, host=host))
 
     if args.prompt:
-        # one-shot 模式：只跑一次 ask，不进入 REPL 循环。
+        # 如果用户传入了 prompt ，比如：pico --prompt "你好"，那就代表只执行一次回答，不会进入交互模式
         prompt = " ".join(args.prompt).strip()
         if prompt:
             print()

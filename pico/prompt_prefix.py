@@ -5,7 +5,7 @@ import json
 import textwrap
 from dataclasses import dataclass
 
-from .workspace import now
+from .workspace import WorkspaceContext, now
 
 
 @dataclass
@@ -34,7 +34,7 @@ def tool_signature(tools):
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def build_prompt_prefix(workspace, tools, built_at=None):
+def build_prompt_prefix(workspace: WorkspaceContext, tools, built_at=None):
     tool_lines = []
     for name, tool in tools.items():
         fields = ", ".join(f"{key}: {value}" for key, value in tool["schema"].items())

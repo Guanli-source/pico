@@ -193,6 +193,8 @@ def tool_search(context, args):
             cwd=context.root,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         return result.stdout.strip() or result.stderr.strip() or "(no matches)"
 
@@ -223,6 +225,8 @@ def tool_run_shell(context, args):
         shell=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
         # 这里传入的是过滤后的环境变量，而不是直接继承整个父 shell 环境，
         # 目的是减少敏感信息被意外带进命令执行环境的风险。

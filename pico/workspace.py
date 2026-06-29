@@ -62,6 +62,8 @@ class WorkspaceContext:
                     cwd=cwd,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     check=True,
                     timeout=5,
                 )
@@ -73,7 +75,7 @@ class WorkspaceContext:
             Path(repo_root_override).resolve()
             if repo_root_override is not None
             else Path(git(["rev-parse", "--show-toplevel"], str(cwd))).resolve()
-        )
+        ) # 用了git就找仓库根目录，否则 repo_root就是当前路径
         docs = {}
         # 同时扫描 repo_root 和 cwd，这样在子目录启动时也能看到本地文档；
         # 但用相对路径做 key，避免同一份文档被重复收集。
@@ -95,7 +97,10 @@ class WorkspaceContext:
                 lambda branch: branch[len("origin/") :] if branch.startswith("origin/") else branch
             )(git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], "origin/main") or "origin/main"),
             status=clip(git(["status", "--short"], "clean") or "clean", 1500),
+            
+            # 获取最近的5条 git commit -m "xxx" 里写的 xxx。
             recent_commits=[line for line in git(["log", "--oneline", "-5"]).splitlines() if line],
+            
             project_docs=docs,
         )
 
