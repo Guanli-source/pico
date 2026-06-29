@@ -65,7 +65,7 @@ class WorkspaceContext:
                     check=True,
                     timeout=5,
                 )
-                return result.stdout.strip() or fallback
+                return result.stdout.strip() or fallback # 通过git获取当前项目的根目录，如果这个项目没用git，就返回空
             except Exception:
                 return fallback
 
@@ -82,7 +82,7 @@ class WorkspaceContext:
                 path = base / name
                 if not path.exists():
                     continue
-                key = str(path.relative_to(repo_root))
+                key = str(path.relative_to(repo_root)) # 
                 if key in docs:
                     continue
                 docs[key] = clip(path.read_text(encoding="utf-8", errors="replace"), 1200)

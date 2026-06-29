@@ -299,7 +299,7 @@ class Pico:
         return securitylib.redact_artifact(value, key=key, secret_env_names=self.secret_env_names)
 
     def shell_env(self):
-        return securitylib.shell_env(allowlist=self.shell_env_allowlist, root=self.root)
+        return securitylib.shell_env(allowlist=self.shell_env_allowlist, root=str(self.root))
 
     def prompt_metadata(self, user_message, prompt):
         _, metadata = self._build_prompt_and_metadata(user_message)
@@ -339,6 +339,7 @@ class Pico:
 
     def emit_trace(self, task_state, event, payload=None):
         payload = self.redact_artifact(payload or {})
+        assert isinstance(payload, dict)
         payload["event"] = event
         payload["created_at"] = now()
         # trace 是运行中的逐事件时间线，适合回答“这一轮 agent 到底做了什么”。
